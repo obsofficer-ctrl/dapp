@@ -1,8 +1,52 @@
 import { Meteor } from 'meteor/meteor';
 import fs from 'fs';
 import path from 'path';
+import { validateLanguage, DEFAULT_LANGUAGE } from '../../both/startup/index';
 
-const DEFAULT_LANGUAGE = 'de';
+/**
+ * Resolves the path to the private assets directory.
+ * In Meteor, private files are stored in the `private` folder
+ * and accessible via Assets.getText() or the filesystem.
+ */
+const getTemplateDir = () => {
+  // Meteor assets path
+  if (typeof Assets !== 'undefined') {
+    return null; // Will use Assets.getText() instead
+  }
+  return path.join(process.env.PWD || process.cwd(), 'private', 'email-templates');
+};
+
+/**
+ * Reads a template file using Meteor's Assets API if available,
+ * otherwise falls back to filesystem access.
+ *
+ * @param {string} templateName - The base name of the template
+ * @param {string} language - The language code
+ * @returns {string|null} The template content or null if not found
+ */
+const tryReadTemplate = (templateName, language) => {
+  const fileName = `email-templates/${templateName}.${language}.html`;
+  
+  try {
+    // Use Meteor Assets API (reads from /private directory)
+    if (typeof Assets !== 'undefined') {
+      return Assets.getText(fileName);
+    }
+    
+    // Fallback to filesystem for testing environments
+    const templateDir = path.join(process.env.PWD || process.cwd(), 'private');
+    const filePath = path.join(templateDir, fileName);
+    
+    if (fs.existsSync(filePath)) {
+      return fs.readFileSync(filePath, 'utf8');
+    }
+  } catch (e) {
+    // Template not found for this language
+    console.log(`Template '${fileName}' not found: ${e.message}`);
+  }
+  
+  return null;
+};
 
 /**
  * Reads an email template file for the given language.
@@ -13,53 +57,33 @@ const DEFAULT_LANGUAGE = 'de';
  * @returns {string} The template content
  */
 export const readEmailTemplate = (templateName, language) => {
-  const templateDir = path.join(process.env.PWD || '', 'private', 'email-templates');
+  const normalizedLanguage = validateLanguage(language);
   
-  const requestedLangFile = path.join(templateDir, `${templateName}.${language}.html`);
-  const defaultLangFile = path.join(templateDir, `${templateName}.${DEFAULT_LANGUAGE}.html`);
-  const fallbackFile = path.join(templateDir, `${templateName}.html`);
-
-  // Try requested language first
-  if (language && language !== DEFAULT_LANGUAGE) {
-    try {
-      if (fs.existsSync(requestedLangFile)) {
-        console.log(`Reading email template for language: ${language}`);
-        return fs.readFileSync(requestedLangFile, 'utf8');
-      } else {
-        console.log(`Template for language '${language}' not found, falling back to default.`);
-      }
-    } catch (e) {
-      console.log(`Error reading template for language '${language}': ${e.message}`);
+  // Try requested language first (if different from default)
+  if (normalizedLanguage !== DEFAULT_LANGUAGE) {
+    const content = tryReadTemplate(templateName, normalizedLanguage);
+    if (content !== null) {
+      console.log(`Loaded email template '${templateName}' for language: ${normalizedLanguage}`);
+      return content;
     }
+    console.log(`Template for language '${normalizedLanguage}' not found, falling back to '${DEFAULT_LANGUAGE}'.`);
   }
 
-  // Try default language file
-  try {
-    if (fs.existsSync(defaultLangFile)) {
-      console.log(`Reading default language (${DEFAULT_LANGUAGE}) email template.`);
-      return fs.readFileSync(defaultLangFile, 'utf8');
-    }
-  } catch (e) {
-    console.log(`Error reading default language template: ${e.message}`);
+  // Try default language
+  const defaultContent = tryReadTemplate(templateName, DEFAULT_LANGUAGE);
+  if (defaultContent !== null) {
+    console.log(`Loaded default email template '${templateName}' (${DEFAULT_LANGUAGE}).`);
+    return defaultContent;
   }
 
-  // Final fallback to template without language suffix
-  try {
-    if (fs.existsSync(fallbackFile)) {
-      console.log(`Reading fallback email template (no language suffix).`);
-      return fs.readFileSync(fallbackFile, 'utf8');
-    }
-  } catch (e) {
-    console.log(`Error reading fallback template: ${e.message}`);
-  }
-
-  throw new Meteor.Error('template-not-found', `Email template '${templateName}' not found.`);
+  throw new Meteor.Error('template-not-found', `Email template '${templateName}' could not be found for language '${language}' or default '${DEFAULT_LANGUAGE}'.`);
 };
 
 /**
  * Replaces placeholders in a template string with provided data.
+ * Placeholders are in the format {{ key }} or {{key}}.
  *
- * @param {string} template - The template string with placeholders like {{key}}
+ * @param {string} template - The template string with placeholders
  * @param {object} data - Key-value pairs for placeholder replacement
  * @returns {string} The template with replaced placeholders
  */
@@ -80,7 +104,7 @@ export const renderTemplate = (template, data) => {
  * @param {string} params.sender - The sender's email address
  * @param {string} params.confirmationUrl - The confirmation URL
  * @param {string} params.senderName - The sender's name
- * @param {string} params.language - The language code for the email template (optional)
+ * @param {string} [params.language] - The language code for the email template (optional, defaults to 'de')
  */
 export const sendConfirmationRequest = (params) => {
   const {
@@ -91,19 +115,27 @@ export const sendConfirmationRequest = (params) => {
     language = DEFAULT_LANGUAGE
   } = params;
 
-  const templateName = 'doi-email';
-  const templateContent = readEmailTemplate(templateName, language);
+  if (!recipient) throw new Meteor.Error('invalid-param', 'recipient email is required');
+  if (!sender) throw new Meteor.Error('invalid-param', 'sender email is required');
+  if (!confirmationUrl) throw new Meteor.Error('invalid-param', 'confirmationUrl is required');
+
+  const normalizedLanguage = validateLanguage(language);
   
-  const emailBody = renderTemplate(templateContent, {
+  console.log(`Sending DOI confirmation email to ${recipient} [language: ${normalizedLanguage}]`);
+
+  // Load and render email body
+  const bodyTemplate = readEmailTemplate('doi-email', normalizedLanguage);
+  const emailBody = renderTemplate(bodyTemplate, {
     confirmationUrl,
-    senderName,
+    senderName: senderName || sender,
     recipient,
     sender
   });
 
-  const subjectTemplate = readEmailTemplate(`${templateName}-subject`, language);
+  // Load and render email subject
+  const subjectTemplate = readEmailTemplate('doi-email-subject', normalizedLanguage);
   const subject = renderTemplate(subjectTemplate, {
-    senderName,
+    senderName: senderName || sender,
     recipient,
     sender
   }).trim();
@@ -115,5 +147,5 @@ export const sendConfirmationRequest = (params) => {
     html: emailBody
   });
 
-  console.log(`DOI confirmation email sent to ${recipient} in language: ${language}`);
+  console.log(`DOI confirmation email successfully sent to ${recipient} [language: ${normalizedLanguage}]`);
 };
