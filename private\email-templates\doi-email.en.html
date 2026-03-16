@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Please confirm your email address</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #f4f4f4;
+      margin: 0;
+      padding: 0;
+    }
+    .container {
+      max-width: 600px;
+      margin: 40px auto;
+      background-color: #ffffff;
+      padding: 40px;
+      border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    .header {
+      text-align: center;
+      padding-bottom: 20px;
+      border-bottom: 2px solid #eeeeee;
+    }
+    .header h1 {
+      color: #333333;
+      font-size: 24px;
+    }
+    .content {
+      padding: 20px 0;
+      color: #555555;
+      line-height: 1.6;
+    }
+    .button-container {
+      text-align: center;
+      margin: 30px 0;
+    }
+    .confirm-button {
+      background-color: #4CAF50;
+      color: white;
+      padding: 15px 30px;
+      text-decoration: none;
+      border-radius: 5px;
+      font-size: 16px;
+      display: inline-block;
+    }
+    .confirm-button:hover {
+      background-color: #45a049;
+    }
+    .footer {
+      text-align: center;
+      padding-top: 20px;
+      border-top: 2px solid #eeeeee;
+      color: #999999;
+      font-size: 12px;
+    }
+    .url-fallback {
+      word-break: break-all;
+      color: #4CAF50;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>Confirm your email address</h1>
+    </div>
+    <div class="content">
+      <p>Hello,</p>
+      <p>
+        <strong>{{ senderName }}</strong> would like to send you emails and requests 
+        that you confirm your email address.
+      </p>
+      <p>
+        Please click the button below to give your consent and confirm your email address:
+      </p>
+      <div class="button-container">
+        <a href="{{ confirmationUrl }}" class="confirm-button">
+          Confirm now
+        </a>
+      </div>
+      <p>
+        If the button does not work, please copy the following link into your browser:
+      </p>
+      <p class="url-fallback">{{ confirmationUrl }}</p>
+      <p>
+        If you did not expect this request or do not wish to receive emails from 
+        <strong>{{ senderName }}</strong>, you can simply ignore this email.
+      </p>
+    </div>
+    <div class="footer">
+      <p>This email was sent via the Doichain network and is secured by blockchain technology.</p>
+      <p>&copy; Doichain - Double Opt-In Blockchain</p>
+    </div>
+  </div>
+</body>
+</html>
